@@ -1,0 +1,7 @@
+flwr==1.8.0
+torch==2.2.0
+torchvision==0.17.0
+numpy==1.26.4
+opacus==1.4.0
+streamlit==1.32.0
+jinja2==3.1.3
