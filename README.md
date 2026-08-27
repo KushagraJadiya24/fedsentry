@@ -1,174 +1,224 @@
 # FedSentry
 
-**A no-code platform for configuring and running privacy-preserving federated learning pipelines.**
+Federated LoRA fine-tuning for a small language model.
 
-Final Year Major Project — B.Tech Computer Science & Engineering (AI & ML)
+FedSentry lets three simulated participants fine-tune a shared small LLM locally on private, non-IID text data. Only LoRA adapter weights are exchanged with a Flower server and aggregated with FedAvg.
 
----
+## Current scope
 
-## What is FedSentry?
+### Phase 1 — Core pipeline
+- PyTorch fundamentals
+- LoRA fine-tuning
+- Locked base model: `Qwen/Qwen2.5-0.5B-Instruct`
+- Flower + FedAvg
+- 3 simulated terminal clients
+- Plain CSV metrics
+- Before/after generation
 
-FedSentry lets someone train a shared machine learning model across multiple
-independent data sources — without any of them ever having to share their raw data.
+### Phase 2 — Bonus
+- Single-page Streamlit UI
 
-Instead of hand-writing federated learning code (which normally requires an ML
-engineer), FedSentry provides a simple guided setup: pick a task, choose your privacy
-and aggregation settings, and the platform generates and runs the training pipeline for
-you — using [Flower](https://flower.ai) for federated orchestration, [PyTorch](https://pytorch.org)
-for model training, and [Opacus](https://opacus.ai) for differential privacy.
+### Explicitly out of scope
+- Multi-model selection
+- Differential privacy / Opacus
+- FedProx / strategy comparison
+- SQLite
+- Jinja2 code generation
+- JavaScript frontend
+- Multi-laptop demo as a requirement
 
-> **Why this matters:** regulations like GDPR, HIPAA, and India's DPDP Act increasingly
-> prevent organizations from centralizing sensitive data — even when pooling that data
-> would produce a better shared AI model. Federated learning solves this by moving the
-> model to the data instead of the data to the model. FedSentry makes that technique
-> usable without requiring a dedicated ML engineering team.
+Do not add these without an explicit team decision.
 
----
+## Repository structure
 
-## Current Status
-
-🚧 **In active development.** This is a final year academic project, built in
-progressive milestones. See [Roadmap](#roadmap) below for what's done vs. planned.
-
----
-
-## Features
-
-- [x] Federated training pipeline using FedAvg (Flower + PyTorch)
-- [ ] FedProx as an alternate aggregation strategy, benchmarked against FedAvg
-- [ ] Differential privacy toggle (Opacus), with measured accuracy tradeoff
-- [ ] Round-by-round metrics logging (SQLite)
-- [ ] Live-updating dashboard (Streamlit)
-- [ ] No-code configuration wizard (Streamlit)
-- [ ] Automatic code generation from configuration (Jinja2)
-- [ ] Downloadable participant bundle
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Federated orchestration | [Flower](https://flower.ai) (`flwr`) |
-| Model training | PyTorch |
-| Differential privacy | Opacus |
-| Config & metrics storage | SQLite |
-| Code generation | Jinja2 |
-| Wizard & dashboard UI | Streamlit |
-
-No Docker, no separate frontend framework, no external database server required —
-the entire project runs with plain Python. (A containerized/production-grade version
-is noted as future work — see [Roadmap](#roadmap).)
-
----
-
-## Getting Started
-
-### Prerequisites
-- Python 3.10+
-- `pip`
-
-### 1. Clone the repo
-```bash
-git clone https://github.com/<your-username>/fedsentry.git
-cd fedsentry
-```
-
-### 2. Set up a virtual environment
-```bash
-python3 -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
-```
-
-### 3. Install dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Partition the dataset into non-IID client shards
-```bash
-cd data
-python partition_data.py --num_clients 3 --alpha 0.5
-cd ..
-```
-
-### 5. Run the federated pipeline
-Open 4 terminals (all with the virtual environment activated):
-
-```bash
-# Terminal 1 — server
-cd server
-python server.py --rounds 5 --strategy fedavg --min_clients 3
-```
-
-```bash
-# Terminal 2
-cd client
-python client.py --client_id 0 --server_address localhost:8080
-```
-
-```bash
-# Terminal 3
-cd client
-python client.py --client_id 1 --server_address localhost:8080
-```
-
-```bash
-# Terminal 4
-cd client
-python client.py --client_id 2 --server_address localhost:8080
-```
-
-You should see per-round accuracy print in each terminal, and results logged to
-`server/metrics.csv`.
-
----
-
-## Project Structure
-
-```
+```text
 fedsentry/
-├── server/
-│   ├── model.py       # shared PyTorch model definition
-│   ├── server.py       # Flower server: FedAvg / FedProx aggregation
-│   └── metrics.csv     # round-by-round training results (generated)
-├── client/
-│   └── client.py        # Flower client: local training, optional DP
 ├── data/
-│   ├── partition_data.py # non-IID data partitioning script
-│   └── partitions/       # generated per-client data indices
+│   ├── prepare_data.py
+│   └── partitions/
+├── model/
+│   └── model_utils.py
+├── server/
+│   └── server.py
+├── client/
+│   └── client.py
+├── app/
+│   └── Home.py
+├── tests/
+│   ├── test_data.py
+│   ├── test_model_utils.py
+│   └── test_smoke.py
 ├── requirements.txt
+├── .gitignore
+├── CONTRIBUTING.md
 └── README.md
 ```
 
-*(Wizard, dashboard, and code-generation directories will be added as those
-milestones are built — see Roadmap.)*
+The paths and public interfaces above are locked by `FEDSENTRY_CONVENTIONS_v2.md`.
 
----
+## Day-0 setup
 
-## Roadmap
+### 1. Clone
 
-- [x] **Milestone 1:** Working plain federated pipeline (FedAvg, 3 clients, MNIST)
-- [ ] **Milestone 2:** Metrics logging + live dashboard
-- [ ] **Milestone 3:** Jinja2 code generation from a config
-- [ ] **Milestone 4:** Streamlit wizard for no-code configuration
-- [ ] **Milestone 5:** Differential privacy + FedProx comparison
-- [ ] **Future work:** Dockerized deployment, multi-project support, secure aggregation
+```bash
+git clone <your-repository-url>
+cd fedsentry
+```
 
----
+### 2. Create a virtual environment
 
----
+Windows:
 
-## References
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
 
-- McMahan et al., *Communication-Efficient Learning of Deep Networks from Decentralized Data*, AISTATS 2017
-- Li et al., *Federated Optimization in Heterogeneous Networks*, MLSys 2020
-- Wei et al., *Federated Learning with Differential Privacy: Algorithms and Performance Analysis*, IEEE TIFS 2020
-- Flower documentation: https://flower.ai/docs
-- Opacus documentation: https://opacus.ai
+macOS/Linux:
 
----
+```bash
+python -m venv venv
+source venv/bin/activate
+```
 
-## License
+### 3. Install dependencies
 
-This project is for academic purposes as part of a final year major project submission.
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 4. Verify Python
+
+```bash
+python --version
+```
+
+Python 3.10+ is required.
+
+## Golden path
+
+The final Phase-1 developer flow is:
+
+```text
+prepare_data.py
+      ↓
+client_0.jsonl ─┐
+client_1.jsonl ─┼──→ 3 Flower clients
+client_2.jsonl ─┘          ↓
+                       local LoRA
+                           ↓
+                    adapter weights
+                           ↓
+                    Flower server
+                           ↓
+                         FedAvg
+                           ↓
+                     metrics.csv
+                           ↓
+                 before/after generation
+```
+
+During Day 0/early development, each subsystem can be tested independently with stubs/dummy clients.
+
+## Development order
+
+1. Data partitions and schema validation
+2. Qwen loading + LoRA locally
+3. Local training/evaluation
+4. Flower server with dummy clients
+5. Flower client wiring with stubs
+6. Real client/server integration
+7. Multiple federated rounds
+8. Federated evaluation: loss, adapter-only verification, client contribution, baseline comparison
+9. Hardening + before/after demo
+10. Streamlit only after Phase 1 is working
+
+## Locked CLI interfaces
+
+Server:
+
+```bash
+python server/server.py --rounds 3 --min_clients 3 --address 0.0.0.0:8080
+```
+
+Client:
+
+```bash
+python client/client.py --client_id 0 --server_address localhost:8080
+python client/client.py --client_id 1 --server_address localhost:8080
+python client/client.py --client_id 2 --server_address localhost:8080
+```
+
+These commands are the intended final shape. Day-0 stubs may not perform the real training yet.
+
+## Testing
+
+Run:
+
+```bash
+pytest -q
+```
+
+The tests currently focus on contracts and scaffolding. They should become stricter as each implementation lands.
+
+## Team ownership
+
+### Kushagra — AI / Model Engineering
+- `model/model_utils.py`
+- `client/client.py`: `load_client_data()`, `train()`, `evaluate()`
+- Local LoRA fine-tuning and adapter serialization
+
+### Teammate A — Federated Systems + Evaluation
+- `server/server.py`
+- FedAvg orchestration and metrics
+- Adapter-only aggregation verification
+- Multi-round federated evaluation
+- Non-IID contribution analysis
+- Baseline vs federated comparison
+- End-to-end integration/robustness testing
+
+### Teammate B — Data + Client Engineering + UI
+- `data/prepare_data.py`
+- `client/client.py`: `FLClient`
+- `app/Home.py` only after Phase 1 is frozen and working
+
+See the individual task documents for exact ownership boundaries.
+
+## Git workflow
+
+Create a feature branch:
+
+```bash
+git checkout -b feature/<short-description>
+```
+
+Examples:
+
+```text
+feature/lora-model-utils
+feature/lora-client-training
+feature/data-prep
+feature/flower-client
+feature/flower-server
+feature/streamlit-ui
+```
+
+Commit format:
+
+```text
+[area] short description
+```
+
+Examples:
+
+```text
+[model] add LoRA adapter utilities
+[client] add local training loop
+[data] add non-IID partitions
+[server] add FedAvg aggregation
+```
+
+## Source of truth
+
+`FEDSENTRY_CONVENTIONS_v2.md` is the source of truth for locked names, paths, interfaces, schemas, and scope. If a proposed change conflicts with it, stop and discuss the change with the team before implementing it.
