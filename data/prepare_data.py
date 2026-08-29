@@ -1,5 +1,7 @@
 """Prepare the three locked non-IID JSONL client partitions.
 
+Owner: Kashish( Data + Client Wiring )
+
 Day-0 scaffold only.
 
 Final implementation requirements:
