@@ -14,10 +14,10 @@
 - `model/model_utils.py`
 - `client/client.py`: `load_client_data()`, `train()`, `evaluate()`
 
-### Teammate A — Federated Server
+### Sunny Kapoor — Federated Server
 - `server/server.py`
 
-### Teammate B — Data + Flower Client + UI
+### Kashish Pherwani — Data + Flower Client + UI
 - `data/prepare_data.py`
 - `client/client.py`: `FLClient`
 - `app/Home.py` only after Phase 1 is frozen and working
