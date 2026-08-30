@@ -33,9 +33,19 @@ PARTITIONS_DIR = Path(__file__).resolve().parent / "partitions"
 ALPACA_FILE = Path(__file__).resolve().parent / "alpaca_data.json"
 
 def load_alpaca_examples(limit:int=300)-> list[dict]:
+    """Loads the first `limit` examples from alpaca_data.json."""
     with open(ALPACA_FILE,"r",encoding="utf-8") as f:
         all_examples =json.load(f)
     return all_examples[:limit]
+
+def convert_to_locked_schema(examples:dict)-> dict:
+    """Converts one raw Alpaca example ({instruction, input, output}) into
+    the locked FedSentry schema ({instruction, response})."""
+    instruction=examples["instruction"]
+    if examples["input"]:
+        instruction=instruction + " " + examples["input"]
+    response=examples["output"]
+    return {"instruction": instruction, "response": response}
     
 
 
@@ -43,6 +53,10 @@ def main() -> None:
     examples=load_alpaca_examples()
     print(f"Loaded {len(examples)} examples")
     print(examples[0])
+    converted = convert_to_locked_schema(examples[0])
+    print("Example 0:", converted)
+    converted5 = convert_to_locked_schema(examples[5])
+    print("Example 5:", converted5)
 
 
 if __name__ == "__main__":
