@@ -13,17 +13,22 @@ Run tests from the repository root:
 """
 
 from typing import Any
-
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
 
 
-def load_base_model_and_tokenizer(
-    model_name: str = DEFAULT_MODEL_NAME,
-):
-    """Load and return (model, tokenizer)."""
-    raise NotImplementedError("Day-0 scaffold: model loading not implemented yet.")
 
+def load_base_model_and_tokenizer(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"):
+    """Loads and returns (model, tokenizer)."""
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name)
+    return model, tokenizer
+
+
+if __name__ == "__main__":
+    model, tokenizer = load_base_model_and_tokenizer()
+    print(f"Loaded model with {model.num_parameters():,} parameters.")
 
 def apply_lora(model: Any, rank: int = 8, alpha: int = 16):
     """Wrap the base model with a LoRA adapter and return it."""
