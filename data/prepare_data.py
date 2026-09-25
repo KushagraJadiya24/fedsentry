@@ -113,16 +113,39 @@ def build_non_iid_split(examples: list[dict], rng: random.Random) -> dict[int, l
     return client_data
 
 
+def validate_schema(examples: list[dict]) -> None:
+    """Checks every example has exactly the two locked keys, both non-empty."""
+    for i, ex in enumerate(examples):
+        assert set(ex.keys()) == {"instruction", "response"}, (
+            f"line {i} has wrong keys: {list(ex.keys())}"
+        )
+        assert ex["instruction"].strip(), f"line {i} has an empty instruction"
+        assert ex["response"].strip(), f"line {i} has an empty response"
+
+
+def write_partitions(client_data: dict[int, list[dict]]) -> None:
+    """Validates and writes each client's examples to its locked .jsonl file."""
+    PARTITIONS_DIR.mkdir(parents=True, exist_ok=True)
+    for client_id, items in client_data.items():
+        validate_schema(items)
+        out_path = PARTITIONS_DIR / f"client_{client_id}.jsonl"
+        with open(out_path, "w", encoding="utf-8") as f:
+            for ex in items:
+                f.write(json.dumps(ex, ensure_ascii=False) + "\n")
+        print(f"Wrote {len(items)} examples -> {out_path}")
+
+
 def main() -> None:
     examples = load_alpaca_examples()
     print(f"Loaded {len(examples)} examples")
 
     converted_all = [convert_to_locked_schema(ex) for ex in examples]
+    converted_all = [ex for ex in converted_all if ex["instruction"].strip() and ex["response"].strip()]
+    print(f"{len(converted_all)} examples remain after removing empty fields")
 
     rng = random.Random(42)
     client_data = build_non_iid_split(converted_all, rng)
-    for cid, items in client_data.items():
-        print(f"client_{cid}: {len(items)} examples")
+    write_partitions(client_data)
 
 
 if __name__ == "__main__":
