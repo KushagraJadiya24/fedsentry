@@ -4,19 +4,27 @@ Locked public interfaces:
 - load_client_data()
 - train()
 - evaluate()
-(FLClient class owned separately — not implemented here.)
+(FLClient class owned separately — implemented below by Kashish.)
 
-Run standalone test from the repo root:
-    python -m client.client
+Run:
+    python client/client.py --client_id 0
+    python client/client.py --client_id 1 --server_address localhost:8080
 """
 
+import argparse
 import json
 from pathlib import Path
 
+import flwr as fl
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-from model.model_utils import load_base_model_and_tokenizer, apply_lora
+from model.model_utils import (
+    load_base_model_and_tokenizer,
+    apply_lora,
+    get_adapter_parameters,
+    set_adapter_parameters,
+)
 
 
 class InstructionDataset(Dataset):
@@ -74,9 +82,10 @@ def train(model, tokenizer, dataset, epochs: int = 1):
             loss.backward()
             optimizer.step()
             last_loss = loss.item()
-            print(f"  step {i+1} — loss: {last_loss:.4f}")  # NEW
+            print(f"  step {i+1} — loss: {last_loss:.4f}")
         print(f"Epoch {epoch + 1}/{epochs} — loss: {last_loss:.4f}")
     return model, last_loss
+
 
 def evaluate(model, tokenizer, dataset):
     """Returns (loss, some accuracy/quality metric) on held-out examples."""
@@ -93,16 +102,49 @@ def evaluate(model, tokenizer, dataset):
     return avg_loss, None  # no separate accuracy metric per Conventions Section 8
 
 
+# ---------------------------------------------------------------------------
+# FLClient — Kashish's part. Wires local training/evaluation into the Flower
+# network layer. Treats train()/evaluate()/get_adapter_parameters()/
+# set_adapter_parameters() as black boxes, per the task doc.
+# ---------------------------------------------------------------------------
+class FLClient(fl.client.NumPyClient):
+    def __init__(self, client_id: int, partitions_dir: str = "data/partitions"):
+        self.client_id = client_id
+        self.dataset = load_client_data(client_id, partitions_dir)
+
+        self.model, self.tokenizer = load_base_model_and_tokenizer()
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.model = apply_lora(self.model)
+
+    def get_parameters(self, config):
+        return get_adapter_parameters(self.model)
+
+    def fit(self, parameters, config):
+        set_adapter_parameters(self.model, parameters)
+        self.model, loss = train(
+            self.model, self.tokenizer, self.dataset, epochs=config.get("epochs", 1)
+        )
+        updated_parameters = get_adapter_parameters(self.model)
+        num_examples = len(self.dataset)
+        return updated_parameters, num_examples, {"loss": loss, "client_id": self.client_id}
+
+    def evaluate(self, parameters, config):
+        set_adapter_parameters(self.model, parameters)
+        loss, metric = evaluate(self.model, self.tokenizer, self.dataset)
+        num_examples = len(self.dataset)
+        return loss, num_examples, {"metric": metric or 0.0, "client_id": self.client_id}
+
+
+def main():
+    parser = argparse.ArgumentParser(description="FedSentry Flower client.")
+    parser.add_argument("--client_id", type=int, required=True, help="Which client shard to load (0, 1, or 2).")
+    parser.add_argument("--server_address", default="localhost:8080", help="Flower server address.")
+    args = parser.parse_args()
+
+    client = FLClient(client_id=args.client_id)
+    fl.client.start_client(server_address=args.server_address, client=client.to_client())
+
+
 if __name__ == "__main__":
-    model, tokenizer = load_base_model_and_tokenizer()
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    model = apply_lora(model)
-
-    data = load_client_data(client_id=0)
-   # data = data[:2]  # even smaller
-    print(f"Loaded {len(data)} examples for client 0")
-
-    model, train_loss = train(model, tokenizer, data, epochs=1)
-    eval_loss, _ = evaluate(model, tokenizer, data)
-    print(f"Eval loss: {eval_loss:.4f}")
+    main()
