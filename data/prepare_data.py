@@ -46,17 +46,37 @@ def convert_to_locked_schema(examples:dict)-> dict:
         instruction=instruction + " " + examples["input"]
     response=examples["output"]
     return {"instruction": instruction, "response": response}
-    
 
+TOPIC_KEYWORDS = {
+    "science": ["photosynthesis", "atom", "cell", "gravity", "energy", "biology",
+                "physics", "chemical", "planet", "organism", "molecule", "force",
+                "species", "disease", "medicine", "health", "body", "nutrition",
+                "climate", "weather", "environment", "animal", "plant"],
+    "history_geography": ["capital", "war", "country", "president", "century",
+                           "continent", "river", "mountain", "empire", "revolution",
+                           "julius caesar", "king", "queen", "ancient", "civilization",
+                           "history", "historical", "nation", "border", "population"],
+    "coding_tech": ["python", "code", "function", "algorithm", "programming",
+                     "software", "variable", "loop", "database", "array", "class",
+                     "computer", "internet", "website", "app", "technology", "digital"],
+}
+
+def tag_topic(instruction: str) -> str:
+    """Assigns one of the 3 topics to an instruction, via keyword matching."""
+    text = instruction.lower()
+    for topic, keywords in TOPIC_KEYWORDS.items():
+        if any(keyword in text for keyword in keywords):
+            return topic
+    return "unmatched"  # visible instead of hidden inside "science"
 
 def main() -> None:
-    examples=load_alpaca_examples()
+    examples = load_alpaca_examples()
     print(f"Loaded {len(examples)} examples")
-    print(examples[0])
-    converted = convert_to_locked_schema(examples[0])
-    print("Example 0:", converted)
-    converted5 = convert_to_locked_schema(examples[5])
-    print("Example 5:", converted5)
+
+    for ex in [examples[0], examples[5], examples[10]]:
+        converted = convert_to_locked_schema(ex)
+        topic = tag_topic(converted["instruction"])
+        print(f"[{topic}] {converted['instruction']}")
 
 
 if __name__ == "__main__":
