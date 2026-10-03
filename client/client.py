@@ -28,7 +28,7 @@ from model.model_utils import (
 
 
 class InstructionDataset(Dataset):
-    def __init__(self, examples, tokenizer, max_length: int = 128):
+    def __init__(self, examples, tokenizer, max_length: int = 64):
         self.examples = examples
         self.tokenizer = tokenizer
         self.max_length = max_length

@@ -16,12 +16,16 @@ import argparse
 import csv
 from pathlib import Path
 
+import numpy as np
+
 import flwr as fl
 from flwr.server.strategy import FedAvg
 
 
 # Save metrics inside the server folder
 METRICS_FILE = Path(__file__).with_name("metrics.csv")
+
+ADAPTER_FILE = Path(__file__).with_name("federated_adapter.npz")
 
 
 def init_metrics_file():
@@ -77,6 +81,32 @@ def weighted_average(metrics):
 
 class MetricsFedAvg(FedAvg):
     """FedAvg strategy that also logs evaluation metrics to CSV."""
+
+    def aggregate_fit(self, server_round, results, failures):
+        """Aggregate client LoRA parameters and save the global adapter."""
+
+        aggregated_parameters, metrics_aggregated = super().aggregate_fit(
+            server_round,
+            results,
+            failures,
+        )
+
+        if aggregated_parameters is not None:
+            adapter_arrays = fl.common.parameters_to_ndarrays(
+                aggregated_parameters
+            )
+
+            np.savez_compressed(
+                ADAPTER_FILE,
+                *adapter_arrays,
+            )
+
+            print(
+                f"Saved global LoRA adapter: "
+                f"{len(adapter_arrays)} arrays -> {ADAPTER_FILE}"
+            )
+
+        return aggregated_parameters, metrics_aggregated
 
     def aggregate_evaluate(self, server_round, results, failures):
         """Aggregate evaluation results and log round metrics."""
