@@ -12,9 +12,20 @@ DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
 
 
 def load_base_model_and_tokenizer(model_name: str = "Qwen/Qwen2.5-0.5B-Instruct"):
-    """Loads and returns (model, tokenizer)."""
+    """Loads Qwen and moves it to GPU when CUDA is available."""
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+    )
+
+    model = model.to(device)
+
+    print(f"Using device: {device}")
+
     return model, tokenizer
 
 

@@ -63,44 +63,59 @@ def load_client_data(client_id: int, partitions_dir: str = "data/partitions"):
                 examples.append(json.loads(line))
     return examples
 
-
 def train(model, tokenizer, dataset, epochs: int = 1):
     """Local LoRA fine-tuning loop for this client's data only."""
     ds = InstructionDataset(dataset, tokenizer)
-    loader = DataLoader(ds, batch_size=2, shuffle=True)
+    loader = DataLoader(ds, batch_size=1, shuffle=True)
+
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()), lr=1e-4
     )
 
+    device = next(model.parameters()).device
+    print(f"  Training device: {device}")
+
     model.train()
     last_loss = None
+
     for epoch in range(epochs):
         for i, batch in enumerate(loader):
+            batch = {k: v.to(device) for k, v in batch.items()}
+
             optimizer.zero_grad()
             outputs = model(**batch)
             loss = outputs.loss
             loss.backward()
             optimizer.step()
+
             last_loss = loss.item()
             print(f"  step {i+1} — loss: {last_loss:.4f}")
+
         print(f"Epoch {epoch + 1}/{epochs} — loss: {last_loss:.4f}")
+
     return model, last_loss
 
 
 def evaluate(model, tokenizer, dataset):
     """Returns (loss, some accuracy/quality metric) on held-out examples."""
     ds = InstructionDataset(dataset, tokenizer)
-    loader = DataLoader(ds, batch_size=2)
+    loader = DataLoader(ds, batch_size=1)
+
+    device = next(model.parameters()).device
+
     model.eval()
     total_loss, count = 0.0, 0
+
     with torch.no_grad():
         for batch in loader:
+            batch = {k: v.to(device) for k, v in batch.items()}
+
             outputs = model(**batch)
             total_loss += outputs.loss.item()
             count += 1
-    avg_loss = total_loss / max(count, 1)
-    return avg_loss, None  # no separate accuracy metric per Conventions Section 8
 
+    avg_loss = total_loss / max(count, 1)
+    return avg_loss, None
 
 # ---------------------------------------------------------------------------
 # FLClient — Kashish's part. Wires local training/evaluation into the Flower
