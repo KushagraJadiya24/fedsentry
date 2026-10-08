@@ -10,9 +10,27 @@ Run:
     python client/client.py --client_id 0
     python client/client.py --client_id 1 --server_address localhost:8080
 """
+"""Local training and evaluation for one federated client.
+
+Locked public interfaces:
+- load_client_data()
+- train()
+- evaluate()
+(FLClient class owned separately — implemented below by Kashish.)
+
+Speed knobs are environment variables (no CLI or signature changes):
+    FEDSENTRY_MAX_LENGTH, FEDSENTRY_MAX_EXAMPLES, FEDSENTRY_MAX_STEPS,
+    FEDSENTRY_MAX_EVAL_EXAMPLES, FEDSENTRY_BATCH_SIZE, FEDSENTRY_THREADS
+
+Run from the repo root:
+    python -m client.client --client_id 0
+    python -m client.client --client_id 1 --server_address localhost:8080
+"""
 
 import argparse
 import json
+import os
+import time
 from pathlib import Path
 
 import flwr as fl
@@ -26,9 +44,24 @@ from model.model_utils import (
     set_adapter_parameters,
 )
 
+MAX_LENGTH = int(os.environ.get("FEDSENTRY_MAX_LENGTH", "64"))
+MAX_LOCAL_EXAMPLES = int(os.environ.get("FEDSENTRY_MAX_EXAMPLES", "0")) or None
+MAX_STEPS_PER_ROUND = int(os.environ.get("FEDSENTRY_MAX_STEPS", "0")) or None
+MAX_EVAL_EXAMPLES = int(os.environ.get("FEDSENTRY_MAX_EVAL_EXAMPLES", "16"))
+BATCH_SIZE = int(os.environ.get("FEDSENTRY_BATCH_SIZE", "2"))
+
+if os.environ.get("FEDSENTRY_THREADS"):
+    torch.set_num_threads(int(os.environ["FEDSENTRY_THREADS"]))
+
+
+def _get_device():
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 class InstructionDataset(Dataset):
-    def __init__(self, examples, tokenizer, max_length: int = 128):
+    """Tokenizes examples without padding; padding happens per batch in the collate fn."""
+
+    def __init__(self, examples, tokenizer, max_length: int = MAX_LENGTH):
         self.examples = examples
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -39,17 +72,30 @@ class InstructionDataset(Dataset):
     def __getitem__(self, idx):
         ex = self.examples[idx]
         text = f"Instruction: {ex['instruction']}\nResponse: {ex['response']}"
-        enc = self.tokenizer(
-            text,
-            truncation=True,
-            max_length=self.max_length,
-            padding="max_length",
-            return_tensors="pt",
-        )
-        input_ids = enc["input_ids"].squeeze(0)
-        attention_mask = enc["attention_mask"].squeeze(0)
-        labels = input_ids.clone()
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
+        enc = self.tokenizer(text, truncation=True, max_length=self.max_length)
+        return {"input_ids": enc["input_ids"], "attention_mask": enc["attention_mask"]}
+
+
+def _make_collate_fn(tokenizer):
+    pad_id = tokenizer.pad_token_id
+    if pad_id is None:
+        pad_id = tokenizer.eos_token_id
+
+    def collate(batch):
+        longest = max(len(b["input_ids"]) for b in batch)
+        input_ids, attention_mask, labels = [], [], []
+        for b in batch:
+            pad = longest - len(b["input_ids"])
+            input_ids.append(b["input_ids"] + [pad_id] * pad)
+            attention_mask.append(b["attention_mask"] + [0] * pad)
+            labels.append(b["input_ids"] + [-100] * pad)  # padding excluded from loss
+        return {
+            "input_ids": torch.tensor(input_ids),
+            "attention_mask": torch.tensor(attention_mask),
+            "labels": torch.tensor(labels),
+        }
+
+    return collate
 
 
 def load_client_data(client_id: int, partitions_dir: str = "data/partitions"):
@@ -61,46 +107,64 @@ def load_client_data(client_id: int, partitions_dir: str = "data/partitions"):
             line = line.strip()
             if line:
                 examples.append(json.loads(line))
+    if MAX_LOCAL_EXAMPLES:
+        examples = examples[:MAX_LOCAL_EXAMPLES]
     return examples
 
 
-def train(model, tokenizer, dataset, epochs: int = 1):
+def train(model, tokenizer, dataset, epochs: int = 1, max_steps=None):
     """Local LoRA fine-tuning loop for this client's data only."""
+    max_steps = max_steps or MAX_STEPS_PER_ROUND
+    device = _get_device()
+    model.to(device)
+
     ds = InstructionDataset(dataset, tokenizer)
-    loader = DataLoader(ds, batch_size=2, shuffle=True)
+    loader = DataLoader(
+        ds, batch_size=BATCH_SIZE, shuffle=True, collate_fn=_make_collate_fn(tokenizer)
+    )
     optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()), lr=1e-4
+        [p for p in model.parameters() if p.requires_grad], lr=1e-4
     )
 
     model.train()
-    last_loss = None
-    for epoch in range(epochs):
-        for i, batch in enumerate(loader):
+    losses, step = [], 0
+    for _ in range(epochs):
+        for batch in loader:
+            t0 = time.time()
+            batch = {k: v.to(device) for k, v in batch.items()}
             optimizer.zero_grad()
-            outputs = model(**batch)
-            loss = outputs.loss
+            loss = model(**batch).loss
             loss.backward()
             optimizer.step()
-            last_loss = loss.item()
-            print(f"  step {i+1} — loss: {last_loss:.4f}")
-        print(f"Epoch {epoch + 1}/{epochs} — loss: {last_loss:.4f}")
-    return model, last_loss
+            losses.append(loss.item())
+            step += 1
+            print(f"  step {step} — loss: {losses[-1]:.4f} ({time.time() - t0:.1f}s)")
+            if max_steps and step >= max_steps:
+                break
+        if max_steps and step >= max_steps:
+            break
+
+    avg_loss = sum(losses) / max(len(losses), 1)
+    print(f"Train done — {step} steps, avg loss: {avg_loss:.4f}")
+    return model, avg_loss
 
 
 def evaluate(model, tokenizer, dataset):
-    """Returns (loss, some accuracy/quality metric) on held-out examples."""
-    ds = InstructionDataset(dataset, tokenizer)
-    loader = DataLoader(ds, batch_size=2)
+    """Returns (loss, None) on a capped number of examples."""
+    device = _get_device()
+    model.to(device)
+
+    ds = InstructionDataset(dataset[:MAX_EVAL_EXAMPLES], tokenizer)
+    loader = DataLoader(ds, batch_size=BATCH_SIZE, collate_fn=_make_collate_fn(tokenizer))
+
     model.eval()
     total_loss, count = 0.0, 0
     with torch.no_grad():
         for batch in loader:
-            outputs = model(**batch)
-            total_loss += outputs.loss.item()
+            batch = {k: v.to(device) for k, v in batch.items()}
+            total_loss += model(**batch).loss.item()
             count += 1
-    avg_loss = total_loss / max(count, 1)
-    return avg_loss, None  # no separate accuracy metric per Conventions Section 8
-
+    return total_loss / max(count, 1), None  # no separate accuracy metric per Conventions
 
 # ---------------------------------------------------------------------------
 # FLClient — Kashish's part. Wires local training/evaluation into the Flower
