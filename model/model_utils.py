@@ -55,8 +55,28 @@ def set_adapter_parameters(model: Any, parameters):
         (name, param) for name, param in model.named_parameters()
         if "lora" in name.lower() and param.requires_grad
     ]
-    for (name, param), new_value in zip(lora_params, parameters):
-        param.data = torch.from_numpy(new_value).to(param.device)
+
+    if len(lora_params) != len(parameters):
+        raise ValueError(
+            f"Expected {len(lora_params)} adapter arrays, "
+            f"got {len(parameters)}"
+        )
+
+    with torch.no_grad():
+        for (name, param), new_value in zip(lora_params, parameters):
+            if tuple(new_value.shape) != tuple(param.shape):
+                raise ValueError(
+                    f"Shape mismatch for {name}: "
+                    f"expected {tuple(param.shape)}, "
+                    f"got {tuple(new_value.shape)}"
+                )
+
+            param.copy_(
+                torch.from_numpy(new_value).to(
+                    device=param.device,
+                    dtype=param.dtype,
+                )
+            )
 
 
 if __name__ == "__main__":
