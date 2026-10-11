@@ -22,3 +22,4 @@ server/metrics.csv
 # OS
 .DS_Store
 Thumbs.db
+server/federated_adapter.npz
