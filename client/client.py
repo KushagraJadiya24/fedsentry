@@ -49,6 +49,8 @@ MAX_LOCAL_EXAMPLES = int(os.environ.get("FEDSENTRY_MAX_EXAMPLES", "0")) or None
 MAX_STEPS_PER_ROUND = int(os.environ.get("FEDSENTRY_MAX_STEPS", "0")) or None
 MAX_EVAL_EXAMPLES = int(os.environ.get("FEDSENTRY_MAX_EVAL_EXAMPLES", "16"))
 BATCH_SIZE = int(os.environ.get("FEDSENTRY_BATCH_SIZE", "2"))
+HOLDOUT_PER_CLIENT = int(os.environ.get("FEDSENTRY_HOLDOUT", "15"))
+LEARNING_RATE = float(os.environ.get("FEDSENTRY_LR", "1e-4"))
 
 if os.environ.get("FEDSENTRY_THREADS"):
     torch.set_num_threads(int(os.environ["FEDSENTRY_THREADS"]))
@@ -98,8 +100,7 @@ def _make_collate_fn(tokenizer):
     return collate
 
 
-def load_client_data(client_id: int, partitions_dir: str = "data/partitions"):
-    """Loads this client's .jsonl file, returns a list of {instruction, response} dicts."""
+def _read_examples(client_id: int, partitions_dir: str):
     path = Path(partitions_dir) / f"client_{client_id}.jsonl"
     examples = []
     with open(path, "r", encoding="utf-8") as f:
@@ -107,10 +108,27 @@ def load_client_data(client_id: int, partitions_dir: str = "data/partitions"):
             line = line.strip()
             if line:
                 examples.append(json.loads(line))
-    if MAX_LOCAL_EXAMPLES:
-        examples = examples[:MAX_LOCAL_EXAMPLES]
     return examples
 
+
+def _split_holdout(examples):
+    """Last HOLDOUT_PER_CLIENT examples are kept for testing and never trained on."""
+    if HOLDOUT_PER_CLIENT and len(examples) > 2 * HOLDOUT_PER_CLIENT:
+        return examples[:-HOLDOUT_PER_CLIENT], examples[-HOLDOUT_PER_CLIENT:]
+    return examples, []
+
+
+def load_client_data(client_id: int, partitions_dir: str = "data/partitions"):
+    """Loads this client's training examples (held-out test examples are excluded)."""
+    train_examples, _ = _split_holdout(_read_examples(client_id, partitions_dir))
+    if MAX_LOCAL_EXAMPLES:
+        train_examples = train_examples[:MAX_LOCAL_EXAMPLES]
+    return train_examples
+
+
+def load_holdout_data(client_id: int, partitions_dir: str = "data/partitions"):
+    """Returns this client's held-out test examples."""
+    return _split_holdout(_read_examples(client_id, partitions_dir))[1]
 
 def train(model, tokenizer, dataset, epochs: int = 1, max_steps=None):
     """Local LoRA fine-tuning loop for this client's data only."""
@@ -123,7 +141,7 @@ def train(model, tokenizer, dataset, epochs: int = 1, max_steps=None):
         ds, batch_size=BATCH_SIZE, shuffle=True, collate_fn=_make_collate_fn(tokenizer)
     )
     optimizer = torch.optim.AdamW(
-        [p for p in model.parameters() if p.requires_grad], lr=1e-4
+        [p for p in model.parameters() if p.requires_grad], lr=LEARNING_RATE
     )
 
     model.train()
@@ -175,6 +193,8 @@ class FLClient(fl.client.NumPyClient):
     def __init__(self, client_id: int, partitions_dir: str = "data/partitions"):
         self.client_id = client_id
         self.dataset = load_client_data(client_id, partitions_dir)
+        self.holdout = load_holdout_data(client_id, partitions_dir)
+        print(f"Client {client_id}: {len(self.dataset)} training and {len(self.holdout)} held-out examples")
 
         self.model, self.tokenizer = load_base_model_and_tokenizer()
         if self.tokenizer.pad_token is None:
@@ -194,9 +214,9 @@ class FLClient(fl.client.NumPyClient):
         return updated_parameters, num_examples, {"loss": loss, "client_id": self.client_id}
 
     def evaluate(self, parameters, config):
-        set_adapter_parameters(self.model, parameters)
-        loss, metric = evaluate(self.model, self.tokenizer, self.dataset)
-        num_examples = len(self.dataset)
+        eval_data = (self.holdout or self.dataset)[:MAX_EVAL_EXAMPLES]
+        loss, metric = evaluate(self.model, self.tokenizer, eval_data)
+        num_examples = len(eval_data)
         return loss, num_examples, {"metric": metric or 0.0, "client_id": self.client_id}
 
 

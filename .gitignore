@@ -23,3 +23,7 @@ server/metrics.csv
 .DS_Store
 Thumbs.db
 server/federated_adapter.npz
+
+logs/
+server/federated_adapter.npz
+reports/
