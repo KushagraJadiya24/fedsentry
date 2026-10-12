@@ -6,7 +6,7 @@ FedSentry lets three simulated participants fine-tune a shared small LLM locally
 
 ## Current scope
 
-### Phase 1 — Core pipeline
+### Core pipeline
 - PyTorch fundamentals
 - LoRA fine-tuning
 - Locked base model: `Qwen/Qwen2.5-0.5B-Instruct`
@@ -14,20 +14,7 @@ FedSentry lets three simulated participants fine-tune a shared small LLM locally
 - 3 simulated terminal clients
 - Plain CSV metrics
 - Before/after generation
-
-### Phase 2 — Bonus
 - Single-page Streamlit UI
-
-### Explicitly out of scope
-- Multi-model selection
-- Differential privacy / Opacus
-- FedProx / strategy comparison
-- SQLite
-- Jinja2 code generation
-- JavaScript frontend
-- Multi-laptop demo as a requirement
-
-Do not add these without an explicit team decision.
 
 ## Repository structure
 
@@ -56,7 +43,7 @@ fedsentry/
 
 The paths and public interfaces above are locked by `FEDSENTRY_CONVENTIONS_v2.md`.
 
-## Day-0 setup
+## Setup
 
 ### 1. Clone
 
@@ -204,18 +191,5 @@ feature/flower-server
 feature/streamlit-ui
 ```
 
-Commit format:
 
-```text
-[area] short description
-```
-
-Examples:
-
-```text
-[model] add LoRA adapter utilities
-[client] add local training loop
-[data] add non-IID partitions
-[server] add FedAvg aggregation
-```
 
