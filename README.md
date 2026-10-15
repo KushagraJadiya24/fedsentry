@@ -7,6 +7,7 @@ FedSentry lets three simulated participants fine-tune a shared small LLM locally
 ## Current scope
 
 ### Phase 1 — Core pipeline
+
 - PyTorch fundamentals
 - LoRA fine-tuning
 - Locked base model: `Qwen/Qwen2.5-0.5B-Instruct`
@@ -16,9 +17,11 @@ FedSentry lets three simulated participants fine-tune a shared small LLM locally
 - Before/after generation
 
 ### Phase 2 — Bonus
+
 - Single-page Streamlit UI
 
 ### Explicitly out of scope
+
 - Multi-model selection
 - Differential privacy / Opacus
 - FedProx / strategy comparison
@@ -38,6 +41,7 @@ fedsentry/
 │   └── partitions/
 ├── model/
 │   └── model_utils.py
+|   |__ inference.py
 ├── server/
 │   └── server.py
 ├── client/
@@ -165,11 +169,13 @@ The tests currently focus on contracts and scaffolding. They should become stric
 ## Team ownership
 
 ### Kushagra — AI / Model Engineering
+
 - `model/model_utils.py`
 - `client/client.py`: `load_client_data()`, `train()`, `evaluate()`
 - Local LoRA fine-tuning and adapter serialization
 
 ### Sunny — Federated Systems + Evaluation
+
 - `server/server.py`
 - FedAvg orchestration and metrics
 - Adapter-only aggregation verification
@@ -179,6 +185,7 @@ The tests currently focus on contracts and scaffolding. They should become stric
 - End-to-end integration/robustness testing
 
 ### Kashish — Data + Client Engineering + UI
+
 - `data/prepare_data.py`
 - `client/client.py`: `FLClient`
 - `app/Home.py` only after Phase 1 is frozen and working
@@ -218,4 +225,3 @@ Examples:
 [data] add non-IID partitions
 [server] add FedAvg aggregation
 ```
-
