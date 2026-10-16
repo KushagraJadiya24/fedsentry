@@ -2,7 +2,6 @@
 
 Owner: Kashish( Data + Client Wiring )
 
-Day-0 scaffold only.
 
 Final implementation requirements:
 - Generate:

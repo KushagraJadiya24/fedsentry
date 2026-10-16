@@ -73,7 +73,7 @@ class InstructionDataset(Dataset):
 
     def __getitem__(self, idx):
         ex = self.examples[idx]
-        text = f"Instruction: {ex['instruction']}\nResponse: {ex['response']}"
+        text = f"Instruction: {ex['instruction']}\nResponse: {ex['response']}{self.tokenizer.eos_token}"
         enc = self.tokenizer(text, truncation=True, max_length=self.max_length)
         return {"input_ids": enc["input_ids"], "attention_mask": enc["attention_mask"]}
 
