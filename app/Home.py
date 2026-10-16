@@ -288,8 +288,9 @@ if distributed:
     n1, n2, n3 = st.columns(3)
     server_ip = n1.text_input("This laptop's IP address", lan_ip(), help="Check with ipconfig if it looks wrong.")
     port = int(n2.number_input("Port", 1024, 65535, 8080))
-    run_client0 = n3.checkbox("Also run client 0 on this laptop", value=True)
-    cfg_net = {"port": port, "local_clients": [0] if run_client0 else []}
+    local_ids = n3.multiselect("Clients running on THIS laptop", list(range(NUM_CLIENTS)),
+                               default=[c for c in (0, 2) if c < NUM_CLIENTS])
+    cfg_net = {"port": port, "local_clients": sorted(local_ids)}
     with st.expander("3-laptop checklist"):
         st.markdown(
             "1. All laptops on the same network. Use a phone hotspot: college Wi-Fi often blocks laptop-to-laptop traffic.\n"
