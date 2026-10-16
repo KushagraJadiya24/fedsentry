@@ -9,6 +9,4 @@ datasets
 numpy
 pytest
 
-# Phase 2 — install when Phase 1 is working
-# streamlit
 streamlit

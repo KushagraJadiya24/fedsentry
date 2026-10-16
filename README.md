@@ -6,7 +6,7 @@ FedSentry lets three simulated participants fine-tune a shared small LLM locally
 
 ## Current scope
 
-### Phase 1 — Core pipeline
+### Core pipeline
 
 - PyTorch fundamentals
 - LoRA fine-tuning
@@ -60,7 +60,7 @@ fedsentry/
 
 The paths and public interfaces above are locked by `FEDSENTRY_CONVENTIONS_v2.md`.
 
-## Day-0 setup
+## Setup
 
 ### 1. Clone
 
